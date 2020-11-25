@@ -25,6 +25,8 @@ class lasg_worker(object):
         self.model = model
         #the global weights at the last iteration that this worker uploaded
         self.last_upload_weights = None
+        #the last gradient that this worker uploaded
+        self.last_upload_gradient = None
         #list to keep track of the difference in global weight norms between each iteration and the previous one
         self.weights_diff_sq_norm_history = []
         self.staleness = 1
@@ -38,7 +40,7 @@ class lasg_server(object):
     def __init__(self, model, M):
         """
         Initialize the parameter server with a Keras model
-        and a list of size M to store M worker gradients
+        and a variable to store the global gradient (lazily aggregated from the workers)
 
         Parameters
         ----------
@@ -48,7 +50,8 @@ class lasg_server(object):
             The number of workers that can participate in federated learning.
         """
         self.global_model = model
-        self.worker_gradients = [None] * M
+        self.global_gradient = None
+        self.worker_gradient_diffs = [None] * M
 
 
 class lasg_wk2_hparams(object):
@@ -219,17 +222,32 @@ def lasg_wk2(X_train, y_train, X_val, y_val, model_constructor, hparams, rng=Non
             if lasg_wk2_condition:
                 #Increment the worker staleness
                 worker.staleness += 1
+                server.worker_gradient_diffs[wk_i] = None
             else:
                 #"Upload" the new gradients and reset the staleness
+                if worker.last_upload_gradient is None:
+                    server.worker_gradient_diffs[wk_i] = gradient_at_current_weights
+                else:
+                    server.worker_gradient_diffs[wk_i] = [t_a - t_b for t_a, t_b in zip(gradient_at_current_weights, worker.last_upload_gradient)]
                 worker.last_upload_weights = worker.model.get_weights()
-                server.worker_gradients[wk_i] = gradient_at_current_weights
+                worker.last_upload_gradient = gradient_at_current_weights
                 worker.staleness = 1
                 communication_rounds += 1
             
-        #Server updates (update global weights) with Generic LASG update rule
+        #Server updates (update global weights) with Generic LASG update rule.
+        #The first iteration uses the gradients from every worker, since all workers upload.
+        #Subsequent iterations only use gradients from workers that violate the LASG-WK2 condition and upload.
+        #In the case where no workers upload, the existing (unchanged) global gradient is just applied again.
         trainable_vars = server.global_model.trainable_variables
-        worker_gradients_sum = [tf.math.add_n([split_weights[i] * server.worker_gradients[i][j] for i in range(hparams.M)]) for j in range(len(trainable_vars))]
-        server.global_model.optimizer.apply_gradients(zip(worker_gradients_sum, trainable_vars))
+        if any(server.worker_gradient_diffs):
+            grad_diffs_with_split_weights = [gd for gd in zip(server.worker_gradient_diffs, split_weights) if gd[0] is not None]
+            worker_gradient_diff_sum = [tf.math.add_n([wk_split_weight * wk_grad_diff[i] for wk_grad_diff, wk_split_weight in grad_diffs_with_split_weights])
+                                        for i in range(len(trainable_vars))]
+            if server.global_gradient is None:
+                server.global_gradient = worker_gradient_diff_sum
+            else:
+                server.global_gradient = [t_a + t_b for t_a, t_b in zip(server.global_gradient, worker_gradient_diff_sum)]
+        server.global_model.optimizer.apply_gradients(zip(server.global_gradient, trainable_vars))
             
         #Evaluate the global model on the test set on the evaluation interval
         if (k+1) % hparams.evaluation_interval == 0:
