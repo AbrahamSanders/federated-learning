@@ -50,7 +50,8 @@ class fedavg_hparams(object):
     """
     Hyperparameters for the FederatedAveraging algorithm.
     """
-    def __init__(self, K=100, C=0.1, E=1, B=10, eta=0.1, MAX_T=1000, iid=True, evaluation_interval=2):
+    def __init__(self, K=100, C=0.1, E=1, B=10, eta=0.1, MAX_T=10000, iid=True, 
+                 evaluation_interval=5, target_val_accuracy=0.9):
         """
         Parameters
         ----------
@@ -72,13 +73,15 @@ class fedavg_hparams(object):
         The following variables are not assigned explicit names in the paper:
             
         MAX_T : int, optional
-            Maximum number of rounds of FederatedAveraging to run. The default is 1000.
+            Maximum number of rounds of FederatedAveraging to run. The default is 10000.
         iid : boolean, optional
             If iid, we simulate an evenly distributed random split of the data across
             workers. Otherwise each worker gets data in only one (or few) classes. 
             The default is True.
         evaluation_interval : int, optional
-            Evaluate global model whenever this many iterations of FederatedAveraging have been run. The default is 2.
+            Evaluate global model whenever this many iterations of FederatedAveraging have been run. The default is 5.
+        target_val_accuracy : float, optional
+            Stop training if this target validation accuracy has been achieved. The default is 0.9.
         -----------------------------------------------------------
         """
         self.K = K
@@ -89,6 +92,7 @@ class fedavg_hparams(object):
         self.MAX_T = MAX_T
         self.iid = iid
         self.evaluation_interval = evaluation_interval
+        self.target_val_accuracy = target_val_accuracy
 
 def federated_averaging(X_train, y_train, X_val, y_val, model_constructor, hparams, rng=None):
     """
@@ -117,7 +121,7 @@ def federated_averaging(X_train, y_train, X_val, y_val, model_constructor, hpara
     global_model : tf.keras.Model
         The final global model
     
-    iterations : dict
+    log : dict
         Dictionary containing training and validation metrics:
             loss : 
                 training loss at each iteration
@@ -131,6 +135,8 @@ def federated_averaging(X_train, y_train, X_val, y_val, model_constructor, hpara
                 the iteration number at which the measurements were made
             communication_rounds : 
                 the cumulative number of worker uploads by each iteration
+            worker_upload_fraction : 
+                the average fraction of workers who upload each iteration
     """
     if rng is None:
         rng = np.random.default_rng()
@@ -153,8 +159,12 @@ def federated_averaging(X_train, y_train, X_val, y_val, model_constructor, hpara
         worker.y_train = y_train_splits[i]
 
     #Execute the iterations of FederatedAveraging and keep track of the number of communication rounds
-    iterations = {"loss": [], "accuracy": [], "val_loss": [], "val_accuracy": [], "iteration": [], "communication_rounds": []}
+    log = {"loss": [], "accuracy": [], "val_loss": [], "val_accuracy": [], 
+           "iteration": [], "communication_rounds": [], "worker_upload_fraction": []}
     communication_rounds = 0
+    
+    #Do initial evaluation of the randomly initialized global model as a baseline
+    utils.evaluate_and_log(log, server.global_model, X_train, y_train, X_val, y_val, 0, communication_rounds, hparams.K)
     
     m = int(np.ceil(hparams.C * hparams.K)) # Number of workers to use per iteration
 
@@ -181,15 +191,12 @@ def federated_averaging(X_train, y_train, X_val, y_val, model_constructor, hpara
                 axis=0)
         server.global_model.set_weights(global_weights)
         
-        #Evaluate the global model on the test set on the evaluation interval
+        #Evaluate the global model on the train and validation sets on the evaluation interval
         if (t+1) % hparams.evaluation_interval == 0:
-            score = server.global_model.evaluate(X_train, y_train)
-            iterations["loss"].append(score[0])
-            iterations["accuracy"].append(score[1])
-            val_score = server.global_model.evaluate(X_val, y_val)
-            iterations["val_loss"].append(val_score[0])
-            iterations["val_accuracy"].append(val_score[1])
-            iterations["iteration"].append(t+1)
-            iterations["communication_rounds"].append(communication_rounds)
+            utils.evaluate_and_log(log, server.global_model, X_train, y_train, X_val, y_val, t+1, communication_rounds, hparams.K)
+
+            #Stop training when we have reached the target validation accuracy
+            if log["val_accuracy"][-1] >= hparams.target_val_accuracy:
+                break
     
-    return server.global_model, iterations
+    return server.global_model, log

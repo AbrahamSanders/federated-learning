@@ -4,10 +4,10 @@ the MNIST dataset.
 """
 
 import numpy as np
-import matplotlib.pyplot as plt
 from tensorflow import keras
 from tensorflow.keras import layers
 
+import runner
 import lasg
 import federated_avg
 import vanilla_sgd
@@ -19,8 +19,7 @@ def run():
     ############################################################################
     # SETUP
     ############################################################################
-    rng = np.random.default_rng(seed=100)
-    
+
     #Load the data
     (X_train, y_train), (X_test, y_test) = keras.datasets.mnist.load_data()
     
@@ -36,92 +35,80 @@ def run():
     def model_constructor(hparams):
         model = keras.Sequential([
                 keras.Input(shape=X_train.shape[1:]),
-                layers.Conv2D(32, kernel_size=(5, 5), activation="elu"),
+                layers.Conv2D(20, kernel_size=(5, 5), activation="elu"),
                 layers.MaxPooling2D(pool_size=(2, 2)),
-                layers.Conv2D(64, kernel_size=(5, 5), activation="elu"),
+                layers.Conv2D(50, kernel_size=(5, 5), activation="elu"),
                 layers.MaxPooling2D(pool_size=(2, 2)),
                 layers.Flatten(),
-                layers.Dense(512, activation="elu"),
-                layers.Dense(10, activation="softmax")
+                layers.Dense(500, activation="elu"),
+                layers.Dense(10, activation="linear")
             ])
         
         sgd_optimizer = keras.optimizers.SGD(learning_rate=hparams.eta)
-        model.compile(loss="sparse_categorical_crossentropy", optimizer=sgd_optimizer, metrics=["accuracy"])
+        model.compile(loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True), 
+                      optimizer=sgd_optimizer, metrics=["accuracy"])
         
         return model
     
     ############################################################################
-    # VANILLA SGD
+    # RUN EXPERIMENTS
     ############################################################################
     
-    #Run experiment
-    vanilla_sgd_hparams = vanilla_sgd.vanilla_sgd_hparams(epochs=4)
-    model = model_constructor(vanilla_sgd_hparams)
-    model.summary()
-    hist = model.fit(X_train, y_train, 
-                     batch_size=vanilla_sgd_hparams.batch_size, 
-                     epochs=vanilla_sgd_hparams.epochs, 
-                     validation_data=(X_test, y_test))
+    #Run each experiment until this target test accuracy is reached
+    target_test_accuracy = 0.95
     
-    batches_per_epoch = int(np.ceil(X_train.shape[0]/vanilla_sgd_hparams.batch_size))
-    vanilla_sgd_iterations = (np.arange(len(hist.history["val_accuracy"]))+1) * batches_per_epoch
+    vanilla_sgd_hparams = vanilla_sgd.vanilla_sgd_hparams(eta=0.1, batch_size=32, epochs=100, evaluation_interval=5, 
+                                                          target_val_accuracy=target_test_accuracy)
     
-    ############################################################################
-    # FEDERATED AVERAGING (McMahan, Brendan, et al. 2017)
-    ############################################################################
+    #The hyperparameter variables for the federated learning algorithms are set to align with their respective papers.
+    #This can cause confusion: for example the hparam 'K' means # of workers for FederatedAveraging and # of iterations for LASG.
+    #See the constructor docstrings for a reference on what each hyperparameter does for each algorithm.
     
-    #Run experiment
-    fedavg_hparams = federated_avg.fedavg_hparams()
-    _, fedavg_iterations = federated_avg.federated_averaging(X_train, y_train, X_test, y_test, 
-                                                             model_constructor, 
-                                                             fedavg_hparams, rng)
+    fedavg_hparams = federated_avg.fedavg_hparams(K=100, C=0.1, E=1, B=10, eta=0.1, MAX_T=10000, evaluation_interval=2, 
+                                                  target_val_accuracy=target_test_accuracy)
     
-    ############################################################################
-    # LASG (Chen, Tianyi, Yuejiao Sun, and Wotao Yin. 2020)
-    ############################################################################
+    lasg_wk2_hparams = lasg.lasg_wk2_hparams(M=10, K=10000, D=50, c=4000, c_range=10, eta=0.1, B=100, evaluation_interval=5, 
+                                             target_val_accuracy=target_test_accuracy, 
+                                             print_lasg_wk2_condition=True)
     
-    #Run experiment
-    lasg_wk2_hparams = lasg.lasg_wk2_hparams()
-    _, lasg_wk2_iterations = lasg.lasg_wk2(X_train, y_train, X_test, y_test, 
-                                           model_constructor, 
-                                           lasg_wk2_hparams, rng)
+    #Run with the training set distributed I.I.D
+    print()
+    print("Running Experiments with training set distributed I.I.D")
+    print()
     
+    fedavg_hparams.iid = True
+    lasg_wk2_hparams.iid = True
+    
+    rng = np.random.default_rng(seed=100)
+    iid_vanilla_sgd_log, iid_fedavg_log, iid_lasg_wk2_log = runner.run_experiments(
+                    X_train, y_train, X_test, y_test, model_constructor, 
+                    vanilla_sgd_hparams, fedavg_hparams, lasg_wk2_hparams, rng=rng)
+    
+    #Run with the training set distributed non-I.I.D
+    print()
+    print("Running Experiments with training set distributed non-I.I.D")
+    print()
+    
+    fedavg_hparams.iid = False
+    lasg_wk2_hparams.iid = False
+    
+    rng = np.random.default_rng(seed=100)
+    non_iid_vanilla_sgd_log, non_iid_fedavg_log, non_iid_lasg_wk2_log = runner.run_experiments(
+                    X_train, y_train, X_test, y_test, model_constructor, 
+                    vanilla_sgd_hparams, fedavg_hparams, lasg_wk2_hparams, rng=rng)
+    
+    print()
+    print("Done!")
+    print()
     
     ############################################################################
     # Plot results
     ############################################################################
+    runner.plot_results(iid_vanilla_sgd_log, iid_fedavg_log, iid_lasg_wk2_log, 
+                        target_test_accuracy, iid=True)
     
-    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(12, 5))
-    axes[0].plot(vanilla_sgd_iterations, hist.history["loss"], label="Vanilla SGD")
-    axes[0].plot(fedavg_iterations["iteration"], fedavg_iterations["loss"], label="FederatedAveraging")
-    axes[0].plot(lasg_wk2_iterations["iteration"], lasg_wk2_iterations["loss"], label="LASG-WK2")
-    axes[0].set_xlabel("Iteration")
-    axes[0].set_ylabel("Loss")
-    axes[0].set_title("Vanilla SGD vs. FederatedAveraging vs. LASG-WK2 on MNIST CNN (IID)")
-    axes[0].legend()
-    axes[1].plot(fedavg_iterations["communication_rounds"], fedavg_iterations["loss"], label="FederatedAveraging")
-    axes[1].plot(lasg_wk2_iterations["communication_rounds"], lasg_wk2_iterations["loss"], label="LASG-WK2")
-    axes[1].set_xlabel("Communication (rounds of upload)")
-    axes[1].set_ylabel("Loss")
-    axes[1].set_title("FederatedAveraging vs. LASG-WK2 on MNIST CNN (IID)")
-    axes[1].legend()
-    plt.show()
-    
-    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(12, 5))
-    axes[0].plot(vanilla_sgd_iterations, hist.history["val_accuracy"], label="Vanilla SGD")
-    axes[0].plot(fedavg_iterations["iteration"], fedavg_iterations["val_accuracy"], label="FederatedAveraging")
-    axes[0].plot(lasg_wk2_iterations["iteration"], lasg_wk2_iterations["val_accuracy"], label="LASG-WK2")
-    axes[0].set_xlabel("Iteration")
-    axes[0].set_ylabel("Test Accuracy")
-    axes[0].set_title("Vanilla SGD vs. FederatedAveraging vs. LASG-WK2 on MNIST CNN (IID)")
-    axes[0].legend()
-    axes[1].plot(fedavg_iterations["communication_rounds"], fedavg_iterations["val_accuracy"], label="FederatedAveraging")
-    axes[1].plot(lasg_wk2_iterations["communication_rounds"], lasg_wk2_iterations["val_accuracy"], label="LASG-WK2")
-    axes[1].set_xlabel("Communication (rounds of upload)")
-    axes[1].set_ylabel("Test Accuracy")
-    axes[1].set_title("FederatedAveraging vs. LASG-WK2 on MNIST CNN (IID)")
-    axes[1].legend()
-    plt.show()
+    runner.plot_results(non_iid_vanilla_sgd_log, non_iid_fedavg_log, non_iid_lasg_wk2_log, 
+                        target_test_accuracy, iid=False)
     
 if __name__ == "__main__":
     run()
