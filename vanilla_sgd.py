@@ -95,7 +95,7 @@ def sgd(X_train, y_train, X_val, y_val, model_constructor, hparams, rng=None):
     
     def on_batch_end(batch, logs):
         if not model.stop_training:
-            iteration = model.optimizer.iterations.numpy()
+            iteration = int(model.optimizer.iterations)
             #Keras only evaluates on validation data at the end of each epoch, and we want this
             #to happen more frequently (at the specified evaluation interval).
             if iteration % hparams.evaluation_interval == 0:

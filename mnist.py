@@ -114,10 +114,10 @@ def run():
     # Plot results
     ############################################################################
     runner.plot_results(iid_vanilla_sgd_log, iid_fedavg_log, iid_lasg_wk2_log, 
-                        target_test_accuracy, iid=True)
+                        target_test_accuracy, iid=True, dataset="MNIST", modeltype="CNN", mode="save")
     
     runner.plot_results(non_iid_vanilla_sgd_log, non_iid_fedavg_log, non_iid_lasg_wk2_log, 
-                        target_test_accuracy, iid=False)
+                        target_test_accuracy, iid=False, dataset="MNIST", modeltype="CNN", mode="save")
     
 if __name__ == "__main__":
     run()
