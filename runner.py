@@ -11,7 +11,7 @@ import federated_avg
 import vanilla_sgd
 
 def run_experiments(X_train, y_train, X_test, y_test, model_constructor, 
-                    vanilla_sgd_hparams, fedavg_hparams, lasg_wk2_hparams, seed=None):
+                    vanilla_sgd_hparams=None, fedavg_hparams=None, lasg_wk2_hparams=None, seed=None):
     """
     Runs experiments on the provided data using a model built by the provided model constructor.
     
@@ -53,47 +53,52 @@ def run_experiments(X_train, y_train, X_test, y_test, model_constructor,
     ############################################################################
     # VANILLA SGD
     ############################################################################
-    print()
-    print("Running Experiment: VANILLA SGD")
-    print()
     
     #Run experiment
-    rng = np.random.default_rng(seed)
-    _, vanilla_sgd_log = vanilla_sgd.sgd(X_train, y_train, X_test, y_test,
-                                         model_constructor,
-                                         vanilla_sgd_hparams, rng)
+    if vanilla_sgd_hparams is not None:
+        print()
+        print("Running Experiment: VANILLA SGD")
+        print()
+        rng = np.random.default_rng(seed)
+        _, vanilla_sgd_log = vanilla_sgd.sgd(X_train, y_train, X_test, y_test,
+                                             model_constructor,
+                                             vanilla_sgd_hparams, rng)
+    else:
+        vanilla_sgd_log = None
     
     ############################################################################
     # FEDERATED AVERAGING (McMahan, Brendan, et al. 2017)
     ############################################################################
     
-    print()
-    print("Running Experiment: FEDERATED AVERAGING")
-    print()
-    
     #Run experiment
-    rng = np.random.default_rng(seed)
-    _, fedavg_log = federated_avg.federated_averaging(X_train, y_train, X_test, y_test, 
-                                                      model_constructor, 
-                                                      fedavg_hparams, rng)
+    if fedavg_hparams is not None:
+        print()
+        print("Running Experiment: FEDERATED AVERAGING")
+        print()
+        rng = np.random.default_rng(seed)
+        _, fedavg_log = federated_avg.federated_averaging(X_train, y_train, X_test, y_test,
+                                                          model_constructor,
+                                                          fedavg_hparams, rng)
+    else:
+        fedavg_log = None
     
     ############################################################################
     # LASG (Chen, Tianyi, Yuejiao Sun, and Wotao Yin. 2020)
     ############################################################################
     
-    print()
-    print("Running Experiment: LASG")
-    print()
-    
     #Run experiment
-    rng = np.random.default_rng(seed)
-    _, lasg_wk2_log = lasg.lasg_wk2(X_train, y_train, X_test, y_test, 
-                                    model_constructor, 
-                                    lasg_wk2_hparams, rng)
-    
+    if lasg_wk2_hparams is not None:
+        print()
+        print("Running Experiment: LASG")
+        print()
+        rng = np.random.default_rng(seed)
+        _, lasg_wk2_log = lasg.lasg_wk2(X_train, y_train, X_test, y_test,
+                                        model_constructor,
+                                        lasg_wk2_hparams, rng)
+    else:
+        lasg_wk2_log = None
     
     return vanilla_sgd_log, fedavg_log, lasg_wk2_log
-    
 
 def plot_results(vanilla_sgd_log, fedavg_log, lasg_wk2_log, target_test_accuracy, iid):
     """
