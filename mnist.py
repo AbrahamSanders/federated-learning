@@ -76,26 +76,35 @@ def run():
     print("Running Experiments with training set distributed I.I.D")
     print()
     
+    vanilla_sgd_hparams.iid = True
     fedavg_hparams.iid = True
     lasg_wk2_hparams.iid = True
     
-    rng = np.random.default_rng(seed=100)
     iid_vanilla_sgd_log, iid_fedavg_log, iid_lasg_wk2_log = runner.run_experiments(
                     X_train, y_train, X_test, y_test, model_constructor, 
-                    vanilla_sgd_hparams, fedavg_hparams, lasg_wk2_hparams, rng=rng)
+                    vanilla_sgd_hparams, fedavg_hparams, lasg_wk2_hparams, seed=100)
     
     #Run with the training set distributed non-I.I.D
+    #We use the the technique of McMahan, et al. to split the data among workers in a
+    #"pathologically" non-IID manner where each worker may only have a few labels represented
+    #in its local data. Additionally, we also randomize the volume of data each worker receives.
     print()
     print("Running Experiments with training set distributed non-I.I.D")
     print()
     
+    vanilla_sgd_hparams.iid = False
     fedavg_hparams.iid = False
     lasg_wk2_hparams.iid = False
     
-    rng = np.random.default_rng(seed=100)
+    #The stepsize needs to be lowered in the non-IID setting to maintain
+    #stable convergence.
+    vanilla_sgd_hparams.eta = 0.07
+    fedavg_hparams.eta = 0.07
+    lasg_wk2_hparams.eta = 0.07
+    
     non_iid_vanilla_sgd_log, non_iid_fedavg_log, non_iid_lasg_wk2_log = runner.run_experiments(
                     X_train, y_train, X_test, y_test, model_constructor, 
-                    vanilla_sgd_hparams, fedavg_hparams, lasg_wk2_hparams, rng=rng)
+                    vanilla_sgd_hparams, fedavg_hparams, lasg_wk2_hparams, seed=100)
     
     print()
     print("Done!")

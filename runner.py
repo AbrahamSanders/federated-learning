@@ -11,7 +11,7 @@ import federated_avg
 import vanilla_sgd
 
 def run_experiments(X_train, y_train, X_test, y_test, model_constructor, 
-                    vanilla_sgd_hparams, fedavg_hparams, lasg_wk2_hparams, rng=None):
+                    vanilla_sgd_hparams, fedavg_hparams, lasg_wk2_hparams, seed=None):
     """
     Runs experiments on the provided data using a model built by the provided model constructor.
     
@@ -35,8 +35,8 @@ def run_experiments(X_train, y_train, X_test, y_test, model_constructor,
         Hyperparameters for FederatedAveraging.
     lasg_wk2_hparams : lasg.lasg_wk2_hparams
         Hyperparameters for LASG-WK2.
-    rng : numpy.random.Generator, optional
-       instance to use for random number generation.
+    seed : int, optional
+       seed to use for random number generation.
 
     Returns
     -------
@@ -50,9 +50,6 @@ def run_experiments(X_train, y_train, X_test, y_test, model_constructor,
         A logging container object for LASG-WK2, containing the experiment results.
     """
     
-    if rng is None:
-        rng = np.random.default_rng()
-    
     ############################################################################
     # VANILLA SGD
     ############################################################################
@@ -61,9 +58,10 @@ def run_experiments(X_train, y_train, X_test, y_test, model_constructor,
     print()
     
     #Run experiment
+    rng = np.random.default_rng(seed)
     _, vanilla_sgd_log = vanilla_sgd.sgd(X_train, y_train, X_test, y_test,
                                          model_constructor,
-                                         vanilla_sgd_hparams)
+                                         vanilla_sgd_hparams, rng)
     
     ############################################################################
     # FEDERATED AVERAGING (McMahan, Brendan, et al. 2017)
@@ -74,6 +72,7 @@ def run_experiments(X_train, y_train, X_test, y_test, model_constructor,
     print()
     
     #Run experiment
+    rng = np.random.default_rng(seed)
     _, fedavg_log = federated_avg.federated_averaging(X_train, y_train, X_test, y_test, 
                                                       model_constructor, 
                                                       fedavg_hparams, rng)
@@ -87,6 +86,7 @@ def run_experiments(X_train, y_train, X_test, y_test, model_constructor,
     print()
     
     #Run experiment
+    rng = np.random.default_rng(seed)
     _, lasg_wk2_log = lasg.lasg_wk2(X_train, y_train, X_test, y_test, 
                                     model_constructor, 
                                     lasg_wk2_hparams, rng)
@@ -153,9 +153,13 @@ def plot_results(vanilla_sgd_log, fedavg_log, lasg_wk2_log, target_test_accuracy
     axes[1].legend()
     plt.show()
     
+    avg_fedavg_upload_fraction = np.mean(fedavg_log["worker_upload_fraction"][1:])
+    avg_lasg_wk2_upload_fraction = np.mean(lasg_wk2_log["worker_upload_fraction"][1:])
     fig, ax = plt.subplots()
     ax.bar(fedavg_log["iteration"], fedavg_log["worker_upload_fraction"], label="FederatedAveraging")
     ax.bar(lasg_wk2_log["iteration"], lasg_wk2_log["worker_upload_fraction"], label="LASG-WK2")
+    ax.axhline(avg_fedavg_upload_fraction, color="tab:blue", linestyle="--", label="FederatedAveraging (Avg.): {0:.2f}".format(avg_fedavg_upload_fraction))
+    ax.axhline(avg_lasg_wk2_upload_fraction, color="tab:orange", linestyle="--", label="LASG-WK2 (Avg.): {0:.2f}".format(avg_lasg_wk2_upload_fraction))
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Avg. Fraction of workers (uploads)")
     ax.set_title("FederatedAveraging vs. LASG-WK2 \n on MNIST CNN ({0})".format(iid_label))
