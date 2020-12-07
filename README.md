@@ -4,6 +4,7 @@
 Presentation slides: [https://docs.google.com/presentation/d/12jUREcnDRW5Y1KSwwKtV8Z1VbaPSPOCtcdpUC38d3nY/edit?usp=sharing](https://docs.google.com/presentation/d/12jUREcnDRW5Y1KSwwKtV8Z1VbaPSPOCtcdpUC38d3nY/edit?usp=sharing)
 
 Problem set (jupyter): [problem_set.ipynb](problem_set.ipynb)
+
 Problem set (pdf): [problem_set.pdf](problem_set.pdf)
 
 ## Overview
