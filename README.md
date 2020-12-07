@@ -3,7 +3,8 @@
 ## Presentation slides & problem set
 Presentation slides: [https://docs.google.com/presentation/d/12jUREcnDRW5Y1KSwwKtV8Z1VbaPSPOCtcdpUC38d3nY/edit?usp=sharing](https://docs.google.com/presentation/d/12jUREcnDRW5Y1KSwwKtV8Z1VbaPSPOCtcdpUC38d3nY/edit?usp=sharing)
 
-Problem set: [problem_set.ipynb](problem_set.ipynb)
+Problem set (jupyter): [problem_set.ipynb](problem_set.ipynb)
+Problem set (pdf): [problem_set.pdf](problem_set.pdf)
 
 ## Overview
 A Keras implementation of [FederatedAvergaing](http://proceedings.mlr.press/v54/mcmahan17a/mcmahan17a.pdf) [McMahan, Brendan, et al. 2017] and [Lazily Aggregated Stochastic Gradients](https://arxiv.org/pdf/2002.11360.pdf) [Chen, Tianyi, Yuejiao Sun, and Wotao Yin. 2020]
