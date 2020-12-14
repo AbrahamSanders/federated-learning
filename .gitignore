@@ -1,2 +1,6 @@
 
 *.pyc
+*_log.json
+loss.png
+test_accuracy.png
+uploads_fraction.png
